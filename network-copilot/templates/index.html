@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Copilot - 5G Health Monitor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
+            padding: 40px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        
+        .subtitle {
+            color: #888;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .metric-card {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .metric-label {
+            font-size: 12px;
+            color: #888;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+        
+        .metric-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .metric-unit {
+            font-size: 14px;
+            color: #999;
+            margin-left: 4px;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+        
+        .status-ok {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status-warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .diagnosis-section {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .diagnosis-label {
+            font-size: 12px;
+            color: #888;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+        
+        .diagnosis-text {
+            font-size: 16px;
+            color: #333;
+            line-height: 1.5;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+        }
+        
+        button {
+            flex: 1;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+        
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .timestamp {
+            font-size: 12px;
+            color: #999;
+            text-align: center;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌐 Network Copilot</h1>
+        <p class="subtitle">AI-powered 5G network health monitor</p>
+        
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-label">Latency</div>
+                <div class="metric-value" id="latency">--<span class="metric-unit">ms</span></div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Baseline</div>
+                <div class="metric-value" id="baseline">--<span class="metric-unit">ms</span></div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Latency Spike</div>
+                <div class="metric-value" id="spike">--<span class="metric-unit">%</span></div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Packet Loss</div>
+                <div class="metric-value" id="loss">--<span class="metric-unit">%</span></div>
+            </div>
+        </div>
+        
+        <div id="status-badge" class="status-badge"></div>
+        
+        <div class="diagnosis-section">
+            <div class="diagnosis-label">🤖 AI Diagnosis</div>
+            <div class="diagnosis-text" id="diagnosis">
+                <span class="loading"></span>Analyzing your network...
+            </div>
+        </div>
+        
+        <div class="button-group">
+            <button class="btn-primary" onclick="refreshMetrics()">🔄 Refresh Metrics</button>
+            <button class="btn-primary" onclick="getDiagnosis()">💬 Get Diagnosis</button>
+        </div>
+        
+        <div class="timestamp" id="timestamp"></div>
+    </div>
+    
+    <script>
+        function refreshMetrics() {
+            fetch('/api/metrics')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'ok') {
+                        document.getElementById('latency').innerHTML = 
+                            `${data.current_latency}<span class="metric-unit">ms</span>`;
+                        document.getElementById('baseline').innerHTML = 
+                            `${data.baseline_latency}<span class="metric-unit">ms</span>`;
+                        document.getElementById('spike').innerHTML = 
+                            `${data.latency_spike_percent}<span class="metric-unit">%</span>`;
+                        document.getElementById('loss').innerHTML = 
+                            `${data.packet_loss}<span class="metric-unit">%</span>`;
+                        
+                        // Update status badge
+                        const badge = document.getElementById('status-badge');
+                        if (data.has_issues) {
+                            badge.textContent = '⚠️ Issues Detected';
+                            badge.className = 'status-badge status-warning';
+                        } else {
+                            badge.textContent = '✓ Network Healthy';
+                            badge.className = 'status-badge status-ok';
+                        }
+                    } else {
+                        document.getElementById('diagnosis').innerHTML = 
+                            '<span class="loading"></span>Waiting for initial metrics... (30 seconds)';
+                    }
+                    
+                    document.getElementById('timestamp').textContent = 
+                        'Last updated: ' + new Date().toLocaleTimeString();
+                })
+                .catch(error => console.error('Error:', error));
+        }
+        
+        function getDiagnosis() {
+            const diagDiv = document.getElementById('diagnosis');
+            diagDiv.innerHTML = '<span class="loading"></span>Getting AI diagnosis...';
+            
+            fetch('/api/diagnosis')
+                .then(response => response.json())
+                .then(data => {
+                    diagDiv.innerHTML = data.diagnosis;
+                })
+                .catch(error => {
+                    diagDiv.innerHTML = 'Error getting diagnosis: ' + error;
+                    console.error('Error:', error);
+                });
+        }
+        
+        // Auto-refresh metrics every 10 seconds
+        setInterval(refreshMetrics, 10000);
+        
+        // Initial load
+        refreshMetrics();
+        setTimeout(getDiagnosis, 2000);
+    </script>
+</body>
+</html>
