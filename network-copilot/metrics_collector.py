@@ -4,12 +4,17 @@ import time
 import threading
 from datetime import datetime
 import os
+from device_discovery import discover_devices, ping_host
 
 DB_PATH = "data.db"
 
+# Single writer lock to avoid concurrent writes from threads
+_db_lock = threading.Lock()
+
 def init_db():
     """Initialize SQLite database."""
-    conn = sqlite3.connect(DB_PATH)
+    # Use WAL mode and a longer timeout to reduce 'database is locked' errors
+    conn = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False)
     c = conn.cursor()
     c.execute('''
         CREATE TABLE IF NOT EXISTS metrics (
@@ -21,6 +26,29 @@ def init_db():
             tx_bytes INTEGER
         )
     ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS devices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ip TEXT UNIQUE,
+            mac TEXT,
+            hostname TEXT,
+            last_seen DATETIME
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS device_metrics (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            device_ip TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            latency REAL,
+            packet_loss REAL,
+            up INTEGER,
+            FOREIGN KEY(device_ip) REFERENCES devices(ip)
+        )
+    ''')
+    conn.commit()
+    # enable WAL
+    c.execute("PRAGMA journal_mode=WAL;")
     conn.commit()
     conn.close()
 
@@ -42,13 +70,19 @@ def get_ping_metrics():
         packet_loss = 0.0
         
         for line in output.split('\n'):
-            if 'min/avg/max' in line:
+            if 'min/avg/max' in line or 'min/avg/max/mdev' in line:
                 # Example: min/avg/max/stddev = 10.1/15.5/20.3/4.2 ms
                 parts = line.split('=')[1].strip().split('/')
-                latency = float(parts[1])  # avg
+                try:
+                    latency = float(parts[1])  # avg
+                except Exception:
+                    latency = None
             if '%' in line and 'packet' in line.lower():
                 # Example: 0% packet loss
-                packet_loss = float(line.split('%')[0].split()[-1])
+                try:
+                    packet_loss = float(line.split('%')[0].split()[-1])
+                except Exception:
+                    packet_loss = 0.0
         
         return latency, packet_loss
     except Exception as e:
@@ -83,22 +117,56 @@ def get_throughput_metrics():
         print(f"Error getting throughput metrics: {e}")
         return 0, 0
 
+def store_device_metric(device_ip, latency, packet_loss, up):
+    """Store a single device metric row."""
+    try:
+        with _db_lock:
+            conn = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False)
+            c = conn.cursor()
+            c.execute('INSERT OR IGNORE INTO devices (ip, last_seen) VALUES (?, CURRENT_TIMESTAMP)', (device_ip,))
+            c.execute('UPDATE devices SET last_seen=CURRENT_TIMESTAMP WHERE ip=?', (device_ip,))
+            c.execute('''
+                INSERT INTO device_metrics (device_ip, latency, packet_loss, up)
+                VALUES (?, ?, ?, ?)
+            ''', (device_ip, latency, packet_loss, int(bool(up))))
+            conn.commit()
+            conn.close()
+    except Exception as e:
+        print(f"Error storing device metric for {device_ip}: {e}")
+
 def store_metrics():
     """Store metrics to database."""
     latency, packet_loss = get_ping_metrics()
     rx_bytes, tx_bytes = get_throughput_metrics()
     
     if latency is not None:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute('''
-            INSERT INTO metrics (latency, packet_loss, rx_bytes, tx_bytes)
-            VALUES (?, ?, ?, ?)
-        ''', (latency, packet_loss, rx_bytes, tx_bytes))
-        conn.commit()
-        conn.close()
-        
-        print(f"[{datetime.now()}] Latency: {latency:.1f}ms, Loss: {packet_loss:.1f}%, RX: {rx_bytes}, TX: {tx_bytes}")
+        try:
+            with _db_lock:
+                conn = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False)
+                c = conn.cursor()
+                c.execute('''
+                    INSERT INTO metrics (latency, packet_loss, rx_bytes, tx_bytes)
+                    VALUES (?, ?, ?, ?)
+                ''', (latency, packet_loss, rx_bytes, tx_bytes))
+                conn.commit()
+                conn.close()
+            
+            print(f"[{datetime.now()}] Latency: {latency:.1f}ms, Loss: {packet_loss:.1f}%, RX: {rx_bytes}, TX: {tx_bytes}")
+        except Exception as e:
+            print(f"Error writing metrics to DB: {e}")
+
+    # Discover devices and ping each (lightweight)
+    try:
+        devices = discover_devices()
+        for d in devices:
+            ip = d.get('ip')
+            if not ip:
+                continue
+            # ping once with short timeout
+            latency_d, loss_d, up = ping_host(ip)
+            store_device_metric(ip, latency_d, loss_d, up)
+    except Exception as e:
+        print(f"Error collecting device metrics: {e}")
 
 def start_collection(interval=5):
     """Start background metrics collection."""
