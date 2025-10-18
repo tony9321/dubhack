@@ -1,17 +1,66 @@
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, Response
 from metrics_collector import start_collection
-from analyzer import analyze_network
+from analyzer import analyze_network, get_recent_metrics
 from llm_wrapper import get_llm_diagnosis
 from device_discovery import discover_devices
 import sqlite3
-import os
-import subprocess
 import re
 
 app = Flask(__name__)
 
-# Start metrics collection in background
-start_collection(interval=5)
+# Start metrics collection in background (don’t crash the app if it fails)
+try:
+    start_collection(interval=5)
+except Exception as e:
+    print(f"[metrics] background collection failed to start: {e}")
+
+def _rate_latency(ms: float) -> str:
+    if ms is None:
+        return "unknown"
+    if ms < 20: return "excellent"
+    if ms < 50: return "good"
+    if ms < 100: return "fair"
+    return "poor"
+
+def _infer_device_type(hostname: str | None, mac: str | None) -> str:
+    hn = (hostname or "").lower()
+    mac = (mac or "").lower()
+
+    # Hostname heuristics
+    if any(k in hn for k in ["iphone", "ios"]): return "phone (iPhone)"
+    if any(k in hn for k in ["android", "pixel", "galaxy", "oneplus"]): return "phone (Android)"
+    if any(k in hn for k in ["ipad"]): return "tablet (iPad)"
+    if any(k in hn for k in ["macbook", "imac", "mac-mini"]): return "laptop/desktop (Mac)"
+    if any(k in hn for k in ["laptop", "notebook", "thinkpad", "xps", "surface"]): return "laptop (PC)"
+    if any(k in hn for k in ["desktop", "pc"]): return "desktop (PC)"
+    if any(k in hn for k in ["roku", "apple-tv", "firetv", "chromecast", "tv"]): return "streaming/TV"
+    if any(k in hn for k in ["ps5", "ps4", "xbox", "switch"]): return "game console"
+
+    # Simple OUI hints (very limited)
+    # Examples: Apple: 88:e9:fe, d8:30:62 / Samsung: 1c:5a:6b / Google: 3c:5a:b4
+    oui = mac[:8] if len(mac) >= 8 else ""
+    apple_ouis = {"88:e9:fe", "d8:30:62", "8c:85:90", "f0:18:98"}
+    samsung_ouis = {"1c:5a:6b", "14:32:d1", "30:07:4d"}
+    google_ouis = {"3c:5a:b4", "f4:f5:d8", "a4:77:33"}
+    if oui in apple_ouis: return "Apple device"
+    if oui in samsung_ouis: return "Samsung device"
+    if oui in google_ouis: return "Google device"
+
+    return "unknown"
+
+@app.route('/favicon.ico')
+def favicon():
+    """Serve a tiny inline SVG favicon to avoid 404s."""
+    svg = (
+        "<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'>"
+        "<defs><linearGradient id='g' x1='0' x2='1' y1='0' y2='1'><stop offset='0%' stop-color='#667eea'/><stop offset='100%' stop-color='#764ba2'/></linearGradient></defs>"
+        "<rect width='64' height='64' rx='12' fill='url(#g)'/>"
+        "<circle cx='32' cy='32' r='18' fill='none' stroke='white' stroke-width='3'/>"
+        "<path d='M14 32 H50' stroke='white' stroke-width='3' stroke-linecap='round'/>"
+        "<path d='M32 14 V50' stroke='white' stroke-width='3' stroke-linecap='round'/>"
+        "</svg>"
+    )
+    return Response(svg, mimetype='image/svg+xml')
 
 @app.route('/')
 def index():
@@ -22,38 +71,105 @@ def index():
 def get_metrics():
     """Return current network metrics."""
     analysis = analyze_network()
-    
+
     if not analysis:
         return jsonify({
             "status": "waiting",
             "message": "Collecting metrics... Please wait."
         })
-    
-    return jsonify({
+
+    current = float(analysis.get("current_latency", 0.0))
+    baseline = float(analysis.get("baseline_latency", current or 0.0))
+    loss = float(analysis.get("packet_loss", 0.0))
+    spike = float(analysis.get("latency_spike_percent",
+                               (max(0.0, (current - baseline) / baseline * 100) if baseline else 0.0)))
+    has_issues = bool(analysis.get("has_issues", (spike > 30.0 or loss > 2.0)))
+
+    payload = {
         "status": "ok",
-        "current_latency": round(analysis["current_latency"], 1),
-        "baseline_latency": round(analysis["baseline_latency"], 1),
-        "latency_spike_percent": round(analysis["latency_spike_percent"], 1),
-        "packet_loss": round(analysis["packet_loss"], 1),
-        "has_issues": analysis["has_issues"]
-    })
+        "current_latency": round(current, 1),
+        "baseline_latency": round(baseline, 1),
+        "latency_spike_percent": round(spike, 1),
+        "packet_loss": round(loss, 1),
+        "has_issues": has_issues,
+        # Aliases some frontends expect:
+        "latency_ms": round(current, 1),
+        "baseline_ms": round(baseline, 1),
+        "spike_pct": round(spike, 1),
+        "packet_loss_pct": round(loss, 1),
+        # Extras:
+        "latency_rating": _rate_latency(current),
+        "usual_latency_range_ms": {
+            "min": round(max(0.0, baseline - 10.0), 1),
+            "max": round(baseline + 10.0, 1)
+        }
+    }
+    return jsonify(payload)
 
 @app.route('/api/diagnosis')
 def get_diagnosis():
-    """Get LLM-powered network diagnosis."""
+    """Get LLM-powered network diagnosis (with fallback)."""
     diagnosis = get_llm_diagnosis()
-    
-    return jsonify({
-        "diagnosis": diagnosis
-    })
+    return jsonify({ "diagnosis": diagnosis })
 
+@app.route('/api/summary')
+def api_summary():
+    """Summarize last 5 minutes of samples for quick trend view."""
+    try:
+        rows = get_recent_metrics(seconds=300)  # (latency, packet_loss, rx_bytes, tx_bytes, timestamp)
+        if not rows:
+            return jsonify({
+                "status": "waiting",
+                "message": "No recent samples to summarize"
+            })
+
+        latencies = [r[0] for r in rows if r[0] is not None]
+        losses = [r[1] for r in rows if r[1] is not None]
+
+        def _percentile(arr, p):
+            if not arr:
+                return None
+            arr = sorted(arr)
+            k = (len(arr) - 1) * (p / 100.0)
+            f = int(k)
+            c = min(f + 1, len(arr) - 1)
+            if f == c:
+                return arr[int(k)]
+            return arr[f] + (arr[c] - arr[f]) * (k - f)
+
+        avg_latency = sum(latencies)/len(latencies) if latencies else None
+        max_latency = max(latencies) if latencies else None
+        p95_latency = _percentile(latencies, 95) if latencies else None
+        avg_loss = sum(losses)/len(losses) if losses else None
+
+        return jsonify({
+            "status": "ok",
+            "window_seconds": 300,
+            "samples": len(rows),
+            "avg_latency": round(avg_latency, 1) if avg_latency is not None else None,
+            "p95_latency": round(p95_latency, 1) if p95_latency is not None else None,
+            "max_latency": round(max_latency, 1) if max_latency is not None else None,
+            "avg_packet_loss": round(avg_loss, 2) if avg_loss is not None else None
+        })
+    except Exception as e:
+        return jsonify({"status":"error", "error": str(e)}), 500
 
 @app.route('/api/devices')
 def api_devices():
-    """Return discovered devices."""
-    devs = discover_devices()
-    return jsonify({ 'devices': devs })
-
+    """Return discovered devices, with simple type inference."""
+    try:
+        devs = discover_devices()  # expected dicts with keys: ip, mac, hostname
+        enriched = []
+        for d in devs:
+            ip = d.get("ip")
+            mac = d.get("mac")
+            hostname = d.get("hostname")
+            dtype = _infer_device_type(hostname, mac)
+            enriched.append({ **d, "type": dtype })
+        return jsonify({ 'devices': enriched })
+    except Exception as e:
+        # Keep UI responsive even if discovery fails
+        return jsonify({ 'devices': [], 'error': str(e) }), 200
 
 @app.route('/api/device/<ip>/metrics')
 def api_device_metrics(ip):
@@ -84,12 +200,7 @@ def api_device_metrics(ip):
     except Exception as e:
         return jsonify({ 'error': str(e) }), 500
 
-output = subprocess.check_output(["arp", "-a"]).decode()
-devices = re.findall(r"\(([\d\.]+)\) at ([\w:]+)", output)
-
-for device in devices:
-    ip, mac = device
-    print(f"Device IP: {ip}, MAC: {mac}")
+# Removed ARP scan on import (it can block/fail in some environments)
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
