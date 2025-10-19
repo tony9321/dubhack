@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 # Blocking/unblocking IPs via iptables
 import subprocess
 
@@ -43,6 +44,8 @@ GLOBAL_THRESHOLDS = {
 }
 # Example per-device override: { '192.168.50.176': {'latency': 150, 'loss': 2.0} }
 PER_DEVICE_THRESHOLDS = {}
+=======
+>>>>>>> Stashed changes
 from flask import Flask, render_template, jsonify, Response
 from metrics_collector import start_collection
 from analyzer import analyze_network, get_recent_metrics
@@ -52,6 +55,14 @@ import sqlite3
 import re
 
 app = Flask(__name__)
+
+# Threshold configuration (can be moved to config file later)
+GLOBAL_THRESHOLDS = {
+    'latency': 200,   # ms
+    'loss': 5.0      # percent
+}
+# Example per-device override: { '192.168.50.176': {'latency': 150, 'loss': 2.0} }
+PER_DEVICE_THRESHOLDS = {}
 
 # Start metrics collection in background (don’t crash the app if it fails)
 try:
