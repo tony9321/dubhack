@@ -1,3 +1,41 @@
+# Blocking/unblocking IPs via iptables
+import subprocess
+
+def block_ip(ip):
+    try:
+        subprocess.run(["sudo", "iptables", "-A", "INPUT", "-s", ip, "-j", "DROP"], check=True)
+        subprocess.run(["sudo", "iptables", "-A", "OUTPUT", "-d", ip, "-j", "DROP"], check=True)
+        return True, f"Blocked IP {ip}"
+    except Exception as e:
+        return False, str(e)
+
+def unblock_ip(ip):
+    try:
+        subprocess.run(["sudo", "iptables", "-D", "INPUT", "-s", ip, "-j", "DROP"], check=True)
+        subprocess.run(["sudo", "iptables", "-D", "OUTPUT", "-d", ip, "-j", "DROP"], check=True)
+        return True, f"Unblocked IP {ip}"
+    except Exception as e:
+        return False, str(e)
+
+@app.route('/api/block_ip', methods=['POST'])
+def api_block_ip():
+    from flask import request
+    data = request.get_json()
+    ip = data.get('ip')
+    if not ip:
+        return jsonify({"success": False, "error": "Missing IP"}), 400
+    success, msg = block_ip(ip)
+    return jsonify({"success": success, "message": msg})
+
+@app.route('/api/unblock_ip', methods=['POST'])
+def api_unblock_ip():
+    from flask import request
+    data = request.get_json()
+    ip = data.get('ip')
+    if not ip:
+        return jsonify({"success": False, "error": "Missing IP"}), 400
+    success, msg = unblock_ip(ip)
+    return jsonify({"success": success, "message": msg})
 # Threshold configuration (can be moved to config file later)
 GLOBAL_THRESHOLDS = {
     'latency': 200,   # ms
