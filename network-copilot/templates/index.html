@@ -209,13 +209,14 @@
                     <tr>
                         <th style="text-align:left;padding:8px;border-bottom:1px solid #eee">IP</th>
                         <th style="text-align:left;padding:8px;border-bottom:1px solid #eee">Hostname / MAC</th>
+                        <th style="text-align:left;padding:8px;border-bottom:1px solid #eee">Type</th>
                         <th style="text-align:right;padding:8px;border-bottom:1px solid #eee">Last latency (ms)</th>
                         <th style="text-align:right;padding:8px;border-bottom:1px solid #eee">Status</th>
                         <th style="text-align:right;padding:8px;border-bottom:1px solid #eee">Last seen</th>
                     </tr>
                 </thead>
                 <tbody id="devices-body">
-                    <tr><td colspan="5" style="padding:12px;color:#666">Loading devices...</td></tr>
+                    <tr><td colspan="6" style="padding:12px;color:#666">Loading devices...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -302,7 +303,7 @@
             const tbody = document.getElementById('devices-body');
             const lastUpdate = document.getElementById('devices-last-update');
             if(!devResp || !devResp.devices){
-                tbody.innerHTML = '<tr><td colspan="5" style="padding:12px;color:#900">Failed to load devices</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" style="padding:12px;color:#900">Failed to load devices</td></tr>';
                 lastUpdate.textContent = 'Failed to load devices';
                 return;
             }
@@ -310,7 +311,7 @@
             lastUpdate.textContent = 'Last update: ' + new Date().toLocaleTimeString();
             const devices = devResp.devices;
             if(devices.length === 0){
-                tbody.innerHTML = '<tr><td colspan="5" style="padding:12px;color:#666">No devices discovered</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" style="padding:12px;color:#666">No devices discovered</td></tr>';
                 return;
             }
 
@@ -322,6 +323,8 @@
                     const ip = d.ip;
                     const hostname = d.hostname || '';
                     const mac = d.mac || '';
+                    // Always use backend type, fallback to 'Unknown' if missing
+                    const type = (typeof d.type === 'string' && d.type.length > 0) ? d.type : 'Unknown';
                     const m = await fetchJSON(`/api/device/${ip}/metrics`);
                     let latency = null, up = null, ts = null;
                     if(m && m.metrics && m.metrics.length>0){
@@ -330,7 +333,7 @@
                         up = recent.up;
                         ts = recent.timestamp;
                     }
-                    return {ip, hostname, mac, latency, up, ts};
+                    return {ip, hostname, mac, type, latency, up, ts};
                 });
                 const resolved = await Promise.all(promises);
                 rows = rows.concat(resolved);
@@ -342,10 +345,12 @@
                 const latencyText = (r.latency === null) ? '—' : (Math.round(r.latency*100)/100) + ' ms';
                 const lastSeen = r.ts ? r.ts : '—';
                 const hostname = r.hostname || r.mac || '';
+                const type = (typeof r.type === 'string' && r.type.length > 0) ? r.type : 'Unknown';
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td style="padding:8px;border-bottom:1px solid #f0f0f0">${r.ip}</td>
                     <td style="padding:8px;border-bottom:1px solid #f0f0f0">${hostname}</td>
+                    <td style="padding:8px;border-bottom:1px solid #f0f0f0">${type}</td>
                     <td style="padding:8px;text-align:right;border-bottom:1px solid #f0f0f0">${latencyText}</td>
                     <td style="padding:8px;text-align:right;border-bottom:1px solid #f0f0f0"><span style="color:${statusColor};font-weight:600">${r.up ? 'UP' : 'DOWN'}</span></td>
                     <td style="padding:8px;text-align:right;border-bottom:1px solid #f0f0f0">${lastSeen}</td>
