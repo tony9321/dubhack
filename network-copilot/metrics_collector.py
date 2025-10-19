@@ -43,6 +43,8 @@ def init_db():
             latency REAL,
             packet_loss REAL,
             up INTEGER,
+            rx_bytes INTEGER,
+            tx_bytes INTEGER,
             FOREIGN KEY(device_ip) REFERENCES devices(ip)
         )
     ''')
@@ -120,15 +122,30 @@ def get_throughput_metrics():
 def store_device_metric(device_ip, latency, packet_loss, up):
     """Store a single device metric row."""
     try:
+        # Get RX/TX bytes for this device (if possible)
+        rx_bytes = None
+        tx_bytes = None
+        # Try to get per-device stats from /proc/net/dev
+        try:
+            with open('/proc/net/dev', 'r') as f:
+                lines = f.readlines()
+            for line in lines[2:]:
+                if device_ip in line:
+                    parts = line.split()
+                    if len(parts) >= 10:
+                        rx_bytes = int(parts[1])
+                        tx_bytes = int(parts[9])
+        except Exception:
+            pass
         with _db_lock:
             conn = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False)
             c = conn.cursor()
             c.execute('INSERT OR IGNORE INTO devices (ip, last_seen) VALUES (?, CURRENT_TIMESTAMP)', (device_ip,))
             c.execute('UPDATE devices SET last_seen=CURRENT_TIMESTAMP WHERE ip=?', (device_ip,))
             c.execute('''
-                INSERT INTO device_metrics (device_ip, latency, packet_loss, up)
-                VALUES (?, ?, ?, ?)
-            ''', (device_ip, latency, packet_loss, int(bool(up))))
+                INSERT INTO device_metrics (device_ip, latency, packet_loss, up, rx_bytes, tx_bytes)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (device_ip, latency, packet_loss, int(bool(up)), rx_bytes, tx_bytes))
             conn.commit()
             conn.close()
     except Exception as e:

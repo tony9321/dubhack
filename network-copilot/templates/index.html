@@ -216,6 +216,8 @@
                         <th style="text-align:left;padding:8px;border-bottom:1px solid #eee">Hostname / MAC</th>
                         <th style="text-align:left;padding:8px;border-bottom:1px solid #eee">Type</th>
                         <th style="text-align:right;padding:8px;border-bottom:1px solid #eee">Last latency (ms)</th>
+                        <th style="text-align:right;padding:8px;border-bottom:1px solid #eee">Download (bps)</th>
+                        <th style="text-align:right;padding:8px;border-bottom:1px solid #eee">Upload (bps)</th>
                         <th style="text-align:right;padding:8px;border-bottom:1px solid #eee">Status</th>
                         <th style="text-align:right;padding:8px;border-bottom:1px solid #eee">Last seen</th>
                         <th style="text-align:left;padding:8px;border-bottom:1px solid #eee">Alert</th>
@@ -335,6 +337,8 @@
                     const alert_message = d.alert_message || '';
                     const sustained_issue = !!d.sustained_issue;
                     const sustained_report = d.sustained_report || '';
+                    const bandwidth_rx_bps = d.bandwidth_rx_bps || null;
+                    const bandwidth_tx_bps = d.bandwidth_tx_bps || null;
                     const m = await fetchJSON(`/api/device/${ip}/metrics`);
                     let latency = null, up = null, ts = null;
                     if(m && m.metrics && m.metrics.length>0){
@@ -343,7 +347,7 @@
                         up = recent.up;
                         ts = recent.timestamp;
                     }
-                    return {ip, hostname, mac, type, latency, up, ts, threshold_exceeded, alert_message, sustained_issue, sustained_report};
+                    return {ip, hostname, mac, type, latency, up, ts, threshold_exceeded, alert_message, sustained_issue, sustained_report, bandwidth_rx_bps, bandwidth_tx_bps};
                 });
                 const resolved = await Promise.all(promises);
                 rows = rows.concat(resolved);
@@ -353,6 +357,8 @@
             for(const r of rows){
                 const statusColor = r.up ? '#0a0' : '#c00';
                 const latencyText = (r.latency === null) ? '—' : (Math.round(r.latency*100)/100) + ' ms';
+                const downloadText = (r.bandwidth_rx_bps === null) ? '—' : (Math.round(r.bandwidth_rx_bps*100)/100) + ' bps';
+                const uploadText = (r.bandwidth_tx_bps === null) ? '—' : (Math.round(r.bandwidth_tx_bps*100)/100) + ' bps';
                 const lastSeen = r.ts ? r.ts : '—';
                 const hostname = r.hostname || r.mac || '';
                 const type = (typeof r.type === 'string' && r.type.length > 0) ? r.type : 'Unknown';
@@ -367,6 +373,8 @@
                     <td style="padding:8px;border-bottom:1px solid #f0f0f0">${hostname}</td>
                     <td style="padding:8px;border-bottom:1px solid #f0f0f0">${type}</td>
                     <td style="padding:8px;text-align:right;border-bottom:1px solid #f0f0f0">${latencyText}</td>
+                    <td style="padding:8px;text-align:right;border-bottom:1px solid #f0f0f0">${downloadText}</td>
+                    <td style="padding:8px;text-align:right;border-bottom:1px solid #f0f0f0">${uploadText}</td>
                     <td style="padding:8px;text-align:right;border-bottom:1px solid #f0f0f0"><span style="color:${statusColor};font-weight:600">${r.up ? 'UP' : 'DOWN'}</span></td>
                     <td style="padding:8px;text-align:right;border-bottom:1px solid #f0f0f0">${lastSeen}</td>
                     <td style="padding:8px;border-bottom:1px solid #f0f0f0;color:#c00;font-weight:600">${alert}</td>

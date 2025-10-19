@@ -186,19 +186,37 @@ def api_devices():
             hostname = d.get("hostname")
             dtype = _infer_device_type(hostname, mac)
 
-            # Get most recent metrics for this device
+            # Get most recent and previous metrics for this device
             conn = sqlite3.connect('data.db')
             c = conn.cursor()
             c.execute('''
-                SELECT latency, packet_loss, timestamp
+                SELECT latency, packet_loss, timestamp, rx_bytes, tx_bytes
                 FROM device_metrics
                 WHERE device_ip = ?
                 ORDER BY timestamp DESC
-                LIMIT 1
+                LIMIT 2
             ''', (ip,))
-            row = c.fetchone()
-            latency = row[0] if row else None
-            loss = row[1] if row else None
+            rows = c.fetchall()
+            latency = rows[0][0] if rows else None
+            loss = rows[0][1] if rows else None
+            rx_bytes = rows[0][3] if rows and rows[0][3] is not None else None
+            tx_bytes = rows[0][4] if rows and rows[0][4] is not None else None
+            bandwidth_rx = None
+            bandwidth_tx = None
+            if len(rows) == 2 and rx_bytes is not None and tx_bytes is not None and rows[1][3] is not None and rows[1][4] is not None:
+                # Calculate bandwidth in bytes/sec
+                t0 = rows[0][2]
+                t1 = rows[1][2]
+                try:
+                    import datetime
+                    dt0 = datetime.datetime.fromisoformat(t0)
+                    dt1 = datetime.datetime.fromisoformat(t1)
+                    interval = (dt0 - dt1).total_seconds()
+                    if interval > 0:
+                        bandwidth_rx = (rx_bytes - rows[1][3]) / interval
+                        bandwidth_tx = (tx_bytes - rows[1][4]) / interval
+                except Exception:
+                    pass
 
             # Determine thresholds
             thresholds = PER_DEVICE_THRESHOLDS.get(ip, GLOBAL_THRESHOLDS)
@@ -254,7 +272,9 @@ def api_devices():
                 "threshold_exceeded": exceeded,
                 "alert_message": alert_message,
                 "sustained_issue": sustained_issue,
-                "sustained_report": sustained_report
+                "sustained_report": sustained_report,
+                "bandwidth_rx_bps": round(bandwidth_rx, 2) if bandwidth_rx is not None else None,
+                "bandwidth_tx_bps": round(bandwidth_tx, 2) if bandwidth_tx is not None else None
             })
         return jsonify({ 'devices': enriched })
     except Exception as e:
@@ -268,7 +288,7 @@ def api_device_metrics(ip):
         conn = sqlite3.connect('data.db')
         c = conn.cursor()
         c.execute('''
-            SELECT timestamp, latency, packet_loss, up
+            SELECT timestamp, latency, packet_loss, up, rx_bytes, tx_bytes
             FROM device_metrics
             WHERE device_ip = ?
             ORDER BY timestamp DESC
@@ -278,13 +298,28 @@ def api_device_metrics(ip):
         conn.close()
 
         data = []
-        for r in rows:
-            data.append({
+        for i, r in enumerate(rows):
+            entry = {
                 'timestamp': r[0],
                 'latency': r[1],
                 'packet_loss': r[2],
-                'up': bool(r[3])
-            })
+                'up': bool(r[3]),
+                'rx_bytes': r[4],
+                'tx_bytes': r[5]
+            }
+            # Calculate bandwidth if previous sample exists
+            if i < len(rows) - 1 and r[4] is not None and r[5] is not None and rows[i+1][4] is not None and rows[i+1][5] is not None:
+                try:
+                    import datetime
+                    t0 = datetime.datetime.fromisoformat(r[0])
+                    t1 = datetime.datetime.fromisoformat(rows[i+1][0])
+                    interval = (t0 - t1).total_seconds()
+                    if interval > 0:
+                        entry['bandwidth_rx_bps'] = round((r[4] - rows[i+1][4]) / interval, 2)
+                        entry['bandwidth_tx_bps'] = round((r[5] - rows[i+1][5]) / interval, 2)
+                except Exception:
+                    pass
+            data.append(entry)
 
         return jsonify({ 'device': ip, 'metrics': data })
     except Exception as e:
