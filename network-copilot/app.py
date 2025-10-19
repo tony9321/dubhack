@@ -26,26 +26,38 @@ def _infer_device_type(hostname: str | None, mac: str | None) -> str:
     hn = (hostname or "").lower()
     mac = (mac or "").lower()
 
-    # Hostname heuristics
-    if any(k in hn for k in ["iphone", "ios"]): return "phone (iPhone)"
-    if any(k in hn for k in ["android", "pixel", "galaxy", "oneplus"]): return "phone (Android)"
-    if any(k in hn for k in ["ipad"]): return "tablet (iPad)"
-    if any(k in hn for k in ["macbook", "imac", "mac-mini"]): return "laptop/desktop (Mac)"
-    if any(k in hn for k in ["laptop", "notebook", "thinkpad", "xps", "surface"]): return "laptop (PC)"
-    if any(k in hn for k in ["desktop", "pc"]): return "desktop (PC)"
+    # Hostname heuristics (expanded)
+    if any(k in hn for k in ["iphone", "ios"]): return "phone (iPhone/iOS)"
+    if any(k in hn for k in ["ipad"]): return "tablet (iPad/iOS)"
+    if any(k in hn for k in ["android", "pixel", "galaxy", "oneplus", "samsung"]): return "phone (Android)"
+    if any(k in hn for k in ["macbook", "imac", "mac-mini", "macpro", "macos"]): return "laptop/desktop (Mac)"
+    if any(k in hn for k in ["intel", "nuc"]): return "desktop (Intel)"
+    if any(k in hn for k in ["windows", "win", "dell", "hp", "lenovo", "thinkpad", "xps", "surface", "msi", "acer", "asus"]): return "laptop/desktop (Windows/PC)"
+    if any(k in hn for k in ["laptop", "notebook"]): return "laptop (generic)"
+    if any(k in hn for k in ["desktop", "pc"]): return "desktop (generic)"
     if any(k in hn for k in ["roku", "apple-tv", "firetv", "chromecast", "tv"]): return "streaming/TV"
     if any(k in hn for k in ["ps5", "ps4", "xbox", "switch"]): return "game console"
 
-    # Simple OUI hints (very limited)
-    # Examples: Apple: 88:e9:fe, d8:30:62 / Samsung: 1c:5a:6b / Google: 3c:5a:b4
+    # OUI (MAC prefix) heuristics (expanded)
     oui = mac[:8] if len(mac) >= 8 else ""
-    apple_ouis = {"88:e9:fe", "d8:30:62", "8c:85:90", "f0:18:98"}
-    samsung_ouis = {"1c:5a:6b", "14:32:d1", "30:07:4d"}
-    google_ouis = {"3c:5a:b4", "f4:f5:d8", "a4:77:33"}
-    if oui in apple_ouis: return "Apple device"
-    if oui in samsung_ouis: return "Samsung device"
-    if oui in google_ouis: return "Google device"
+    apple_ouis = {"88:e9:fe", "d8:30:62", "8c:85:90", "f0:18:98", "a4:5e:60", "b8:8d:12", "ac:bc:32"}
+    samsung_ouis = {"1c:5a:6b", "14:32:d1", "30:07:4d", "f4:09:d8", "00:16:6c"}
+    google_ouis = {"3c:5a:b4", "f4:f5:d8", "a4:77:33", "e4:f0:42"}
+    intel_ouis = {"00:1b:21", "00:13:e8", "00:03:47", "00:15:17"}
+    dell_ouis = {"00:14:22", "00:1a:a0", "00:21:70"}
+    hp_ouis = {"00:1d:60", "00:23:7d", "00:26:2d"}
+    lenovo_ouis = {"00:09:6b", "00:0a:e4", "00:13:02"}
+    asus_ouis = {"00:17:31", "00:1a:92", "00:21:91"}
+    if oui in apple_ouis: return "Apple device (Mac/iOS)"
+    if oui in samsung_ouis: return "Samsung device (Android)"
+    if oui in google_ouis: return "Google device (Android/IoT)"
+    if oui in intel_ouis: return "Intel device (PC/NIC)"
+    if oui in dell_ouis: return "Dell device (PC)"
+    if oui in hp_ouis: return "HP device (PC)"
+    if oui in lenovo_ouis: return "Lenovo device (PC)"
+    if oui in asus_ouis: return "ASUS device (PC)"
 
+    # Fallback
     return "unknown"
 
 @app.route('/favicon.ico')
