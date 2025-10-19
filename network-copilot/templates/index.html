@@ -19,6 +19,10 @@
             align-items: center;
             justify-content: center;
             padding: 20px;
+            overflow-wrap: break-word; /* ✅ breaks long words */
+    word-wrap: break-word;      /* ✅ backward compatibility */
+    word-break: break-word;     /* ✅ ensures no horizontal overflow */
+    box-sizing: border-box;     /* ✅ keeps padding inside the box */
         }
         
         body, html {
