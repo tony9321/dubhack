@@ -222,7 +222,6 @@
                         <th style="text-align:right;padding:8px;border-bottom:1px solid #eee">Last seen</th>
                         <th style="text-align:left;padding:8px;border-bottom:1px solid #eee">Alert</th>
                         <th style="text-align:left;padding:8px;border-bottom:1px solid #eee">Report</th>
-                        <th style="text-align:left;padding:8px;border-bottom:1px solid #eee">Block</th>
                     </tr>
                 </thead>
                 <tbody id="devices-body">
@@ -392,10 +391,10 @@
                     <td style="padding:8px;text-align:right;border-bottom:1px solid #f0f0f0">${lastSeen}</td>
                     <td style="padding:8px;border-bottom:1px solid #f0f0f0;color:#c00;font-weight:600">${alert}</td>
                     <td style="padding:8px;border-bottom:1px solid #f0f0f0;color:#764ba2;font-weight:600">${report}</td>
-                    <td style="padding:8px;border-bottom:1px solid #f0f0f0"><button class="btn-primary" style="padding:6px 12px;font-size:12px;" onclick="blockIp('${r.ip}', this)">Block</button></td>
                 `;
                 tbody.appendChild(tr);
             }
+<<<<<<< HEAD
 
         }
 
@@ -479,6 +478,8 @@
             }catch(e){
                 content.innerHTML = 'Error running analysis: ' + e;
             }
+=======
+>>>>>>> parent of f13024c (  enter the commit message for your changes. Lines starting)
         }
 
         // initial devices panel load + polling

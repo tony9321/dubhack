@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 from flask import Flask, render_template, jsonify, Response, request
 from metrics_collector import start_collection
 from analyzer import analyze_network, get_recent_metrics
@@ -10,6 +11,8 @@ import os
 
 app = Flask(__name__)
 
+=======
+>>>>>>> parent of f13024c (  enter the commit message for your changes. Lines starting)
 # Threshold configuration (can be moved to config file later)
 GLOBAL_THRESHOLDS = {
     'latency': 200,   # ms
@@ -17,6 +20,7 @@ GLOBAL_THRESHOLDS = {
 }
 # Example per-device override: { '192.168.50.176': {'latency': 150, 'loss': 2.0} }
 PER_DEVICE_THRESHOLDS = {}
+<<<<<<< HEAD
 
 # Blocking/unblocking IPs via iptables
 def block_ip(ip):
@@ -34,6 +38,17 @@ def unblock_ip(ip):
         return True, f"Unblocked IP {ip}"
     except Exception as e:
         return False, str(e)
+=======
+from flask import Flask, render_template, jsonify, Response
+from metrics_collector import start_collection
+from analyzer import analyze_network, get_recent_metrics
+from llm_wrapper import get_llm_diagnosis
+from device_discovery import discover_devices
+import sqlite3
+import re
+
+app = Flask(__name__)
+>>>>>>> parent of f13024c (  enter the commit message for your changes. Lines starting)
 
 # Start metrics collection in background (don’t crash the app if it fails)
 try:
