@@ -50,11 +50,11 @@ def get_llm_diagnosis():
     try:
         genai.configure(api_key=api_key)
 
-        # Prefer newer models if available, with fallback
+        # Prefer widely-available models first, with fallback
         model_ids = [
+            "gemini-pro",
             "gemini-1.5-flash",
-            "gemini-1.5-pro",
-            "gemini-pro"
+            "gemini-1.5-pro"
         ]
         model = None
         last_err = None
@@ -62,7 +62,7 @@ def get_llm_diagnosis():
             try:
                 _log(f"Attempting model '{mid}'")
                 model = genai.GenerativeModel(mid)
-                # cheap dry-run: build prompt to ensure object created
+                _log(f"Using model '{mid}'")
                 break
             except Exception as me:
                 last_err = me
