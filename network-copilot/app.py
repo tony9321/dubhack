@@ -175,7 +175,8 @@ def api_summary():
 
 @app.route('/api/devices')
 def api_devices():
-    """Return discovered devices, with type, threshold status, and alert message."""
+    """Return discovered devices, with type, threshold status, alert, and sustained issue report."""
+    import datetime
     try:
         devs = discover_devices()  # expected dicts with keys: ip, mac, hostname
         enriched = []
@@ -196,7 +197,6 @@ def api_devices():
                 LIMIT 1
             ''', (ip,))
             row = c.fetchone()
-            conn.close()
             latency = row[0] if row else None
             loss = row[1] if row else None
 
@@ -214,18 +214,47 @@ def api_devices():
             # Alert message (can call Gemini here if exceeded)
             alert_message = None
             if exceeded:
-                # Optionally call Gemini for diagnosis
                 try:
                     from llm_wrapper import get_llm_diagnosis
                     alert_message = get_llm_diagnosis()
                 except Exception:
                     alert_message = "Threshold exceeded: " + ", ".join(reasons)
 
+            # Check for sustained issues in last 10 minutes (>=3 threshold violations)
+            sustained_issue = False
+            sustained_report = None
+            try:
+                ten_min_ago = (datetime.datetime.now() - datetime.timedelta(minutes=10)).isoformat()
+                c.execute('''
+                    SELECT latency, packet_loss, timestamp
+                    FROM device_metrics
+                    WHERE device_ip = ? AND timestamp > ?
+                ''', (ip, ten_min_ago))
+                rows = c.fetchall()
+                count = 0
+                for r in rows:
+                    l, pl, _ = r
+                    if (l is not None and l > thresholds['latency']) or (pl is not None and pl > thresholds['loss']):
+                        count += 1
+                if count >= 3:
+                    sustained_issue = True
+                    # Call Gemini for a custom report
+                    try:
+                        from llm_wrapper import get_llm_diagnosis
+                        sustained_report = get_llm_diagnosis()
+                    except Exception:
+                        sustained_report = f"Device exceeded thresholds {count} times in last 10 minutes."
+            except Exception:
+                pass
+            conn.close()
+
             enriched.append({
                 **d,
                 "type": dtype,
                 "threshold_exceeded": exceeded,
-                "alert_message": alert_message
+                "alert_message": alert_message,
+                "sustained_issue": sustained_issue,
+                "sustained_report": sustained_report
             })
         return jsonify({ 'devices': enriched })
     except Exception as e:
