@@ -1,3 +1,10 @@
+# Threshold configuration (can be moved to config file later)
+GLOBAL_THRESHOLDS = {
+    'latency': 200,   # ms
+    'loss': 5.0      # percent
+}
+# Example per-device override: { '192.168.50.176': {'latency': 150, 'loss': 2.0} }
+PER_DEVICE_THRESHOLDS = {}
 from flask import Flask, render_template, jsonify, Response
 from metrics_collector import start_collection
 from analyzer import analyze_network, get_recent_metrics
@@ -168,7 +175,7 @@ def api_summary():
 
 @app.route('/api/devices')
 def api_devices():
-    """Return discovered devices, with simple type inference."""
+    """Return discovered devices, with type, threshold status, and alert message."""
     try:
         devs = discover_devices()  # expected dicts with keys: ip, mac, hostname
         enriched = []
@@ -177,7 +184,49 @@ def api_devices():
             mac = d.get("mac")
             hostname = d.get("hostname")
             dtype = _infer_device_type(hostname, mac)
-            enriched.append({ **d, "type": dtype })
+
+            # Get most recent metrics for this device
+            conn = sqlite3.connect('data.db')
+            c = conn.cursor()
+            c.execute('''
+                SELECT latency, packet_loss, timestamp
+                FROM device_metrics
+                WHERE device_ip = ?
+                ORDER BY timestamp DESC
+                LIMIT 1
+            ''', (ip,))
+            row = c.fetchone()
+            conn.close()
+            latency = row[0] if row else None
+            loss = row[1] if row else None
+
+            # Determine thresholds
+            thresholds = PER_DEVICE_THRESHOLDS.get(ip, GLOBAL_THRESHOLDS)
+            exceeded = False
+            reasons = []
+            if latency is not None and latency > thresholds['latency']:
+                exceeded = True
+                reasons.append(f"latency {latency:.1f}ms > {thresholds['latency']}ms")
+            if loss is not None and loss > thresholds['loss']:
+                exceeded = True
+                reasons.append(f"loss {loss:.1f}% > {thresholds['loss']}%")
+
+            # Alert message (can call Gemini here if exceeded)
+            alert_message = None
+            if exceeded:
+                # Optionally call Gemini for diagnosis
+                try:
+                    from llm_wrapper import get_llm_diagnosis
+                    alert_message = get_llm_diagnosis()
+                except Exception:
+                    alert_message = "Threshold exceeded: " + ", ".join(reasons)
+
+            enriched.append({
+                **d,
+                "type": dtype,
+                "threshold_exceeded": exceeded,
+                "alert_message": alert_message
+            })
         return jsonify({ 'devices': enriched })
     except Exception as e:
         # Keep UI responsive even if discovery fails
