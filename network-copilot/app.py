@@ -1,4 +1,3 @@
-
 # Threshold configuration (can be moved to config file later)
 GLOBAL_THRESHOLDS = {
     'latency': 200,   # ms
