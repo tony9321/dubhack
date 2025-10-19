@@ -242,21 +242,9 @@
         <div class="button-group">
             <button class="btn-primary" onclick="refreshMetrics()">🔄 Refresh Metrics</button>
             <button class="btn-primary" onclick="getDiagnosis()">💬 Get Diagnosis</button>
-            <button class="btn-primary" onclick="loadGeminiLogs()">📜 View Gemini Logs</button>
-            <button class="btn-primary" onclick="runSecurityAnalysis()">🔒 AI Security Analysis</button>
         </div>
         
         <div class="timestamp" id="timestamp"></div>
-
-        <div id="gemini-logs" class="diagnosis-section" style="display:none; max-height:200px; overflow:auto; margin-top:12px;">
-            <div class="diagnosis-label">📜 Gemini Logs (latest)</div>
-            <pre id="gemini-logs-content" class="diagnosis-text" style="white-space:pre-wrap"></pre>
-        </div>
-
-        <div id="security-panel" class="diagnosis-section" style="display:none; margin-top:12px;">
-            <div class="diagnosis-label">🔒 AI Security Analysis</div>
-            <div id="security-content" class="diagnosis-text" style="line-height:1.6"></div>
-        </div>
     </div>
     
     <script>
@@ -394,92 +382,6 @@
                 `;
                 tbody.appendChild(tr);
             }
-<<<<<<< HEAD
-
-        }
-
-        // Block IP function
-        window.blockIp = async function(ip, btn){
-            btn.disabled = true;
-            btn.textContent = 'Blocking...';
-            try {
-                const resp = await fetch('/api/block_ip', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ip })
-                });
-                const data = await resp.json();
-                if(data.success){
-                    btn.textContent = 'Blocked';
-                    btn.style.background = '#c00';
-                } else {
-                    btn.textContent = 'Error';
-                    btn.style.background = '#ccc';
-                }
-            } catch(e){
-                btn.textContent = 'Error';
-                btn.style.background = '#ccc';
-            }
-        }
-
-        // Gemini logs viewer
-        async function loadGeminiLogs(){
-            try{
-                const r = await fetch('/api/logs/gemini?n=200');
-                if(!r.ok){ throw new Error(r.statusText); }
-                const data = await r.json();
-                const lines = (data && data.lines) ? data.lines : [];
-                document.getElementById('gemini-logs-content').textContent = lines.join('\n');
-                document.getElementById('gemini-logs').style.display = 'block';
-            }catch(e){
-                document.getElementById('gemini-logs-content').textContent = 'Error loading logs: ' + e;
-                document.getElementById('gemini-logs').style.display = 'block';
-            }
-        }
-
-        // AI Security Analysis
-        async function runSecurityAnalysis(){
-            const panel = document.getElementById('security-panel');
-            const content = document.getElementById('security-content');
-            content.innerHTML = '<span class="loading"></span>Running AI security analysis...';
-            panel.style.display = 'block';
-            try{
-                const r = await fetch('/api/security/ai-analysis?window=900');
-                if(!r.ok){ throw new Error(r.statusText); }
-                const data = await r.json();
-                if(data.status === 'ok' && data.result){
-                    const result = data.result;
-                    const suspects = result.suspected_devices || [];
-                    const observations = result.global_observations || [];
-                    const confidence = result.confidence || 'unknown';
-                    let html = `<div style="margin-bottom:10px"><strong>Confidence:</strong> ${confidence}</div>`;
-                    if(suspects.length === 0){
-                        html += '<p style="color:#0a0;font-weight:600">✓ No suspicious devices detected.</p>';
-                    } else {
-                        html += `<p style="color:#c00;font-weight:600">⚠️ ${suspects.length} suspect(s) found:</p><ul style="margin-left:20px;">`;
-                        for(const s of suspects){
-                            html += `<li style="margin-bottom:8px"><strong>${s.ip}</strong> (risk: ${s.risk_score})<br/>`;
-                            html += `<em>Reasons:</em> ${(s.reasons || []).join(', ')}<br/>`;
-                            html += `<em>Actions:</em> ${(s.recommended_actions || []).join('; ')}</li>`;
-                        }
-                        html += '</ul>';
-                    }
-                    if(observations.length > 0){
-                        html += `<div style="margin-top:10px"><strong>Observations:</strong><ul style="margin-left:20px;">`;
-                        for(const o of observations){
-                            html += `<li>${o}</li>`;
-                        }
-                        html += '</ul></div>';
-                    }
-                    content.innerHTML = html;
-                }else{
-                    content.innerHTML = 'Error: ' + (data.error || 'unknown');
-                }
-            }catch(e){
-                content.innerHTML = 'Error running analysis: ' + e;
-            }
-=======
->>>>>>> parent of f13024c (  enter the commit message for your changes. Lines starting)
         }
 
         // initial devices panel load + polling

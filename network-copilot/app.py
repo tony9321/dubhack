@@ -1,18 +1,3 @@
-<<<<<<< HEAD
-from flask import Flask, render_template, jsonify, Response, request
-from metrics_collector import start_collection
-from analyzer import analyze_network, get_recent_metrics
-from llm_wrapper import get_llm_diagnosis
-from device_discovery import discover_devices
-import sqlite3
-import re
-import subprocess
-import os
-
-app = Flask(__name__)
-
-=======
->>>>>>> parent of f13024c (  enter the commit message for your changes. Lines starting)
 # Threshold configuration (can be moved to config file later)
 GLOBAL_THRESHOLDS = {
     'latency': 200,   # ms
@@ -20,25 +5,6 @@ GLOBAL_THRESHOLDS = {
 }
 # Example per-device override: { '192.168.50.176': {'latency': 150, 'loss': 2.0} }
 PER_DEVICE_THRESHOLDS = {}
-<<<<<<< HEAD
-
-# Blocking/unblocking IPs via iptables
-def block_ip(ip):
-    try:
-        subprocess.run(["sudo", "iptables", "-A", "INPUT", "-s", ip, "-j", "DROP"], check=True)
-        subprocess.run(["sudo", "iptables", "-A", "OUTPUT", "-d", ip, "-j", "DROP"], check=True)
-        return True, f"Blocked IP {ip}"
-    except Exception as e:
-        return False, str(e)
-
-def unblock_ip(ip):
-    try:
-        subprocess.run(["sudo", "iptables", "-D", "INPUT", "-s", ip, "-j", "DROP"], check=True)
-        subprocess.run(["sudo", "iptables", "-D", "OUTPUT", "-d", ip, "-j", "DROP"], check=True)
-        return True, f"Unblocked IP {ip}"
-    except Exception as e:
-        return False, str(e)
-=======
 from flask import Flask, render_template, jsonify, Response
 from metrics_collector import start_collection
 from analyzer import analyze_network, get_recent_metrics
@@ -48,7 +14,6 @@ import sqlite3
 import re
 
 app = Flask(__name__)
->>>>>>> parent of f13024c (  enter the commit message for your changes. Lines starting)
 
 # Start metrics collection in background (don’t crash the app if it fails)
 try:
@@ -361,73 +326,6 @@ def api_device_metrics(ip):
         return jsonify({ 'error': str(e) }), 500
 
 # Removed ARP scan on import (it can block/fail in some environments)
-
-@app.route('/api/block_ip', methods=['POST'])
-def api_block_ip():
-    """Block an IP address using iptables."""
-    try:
-        data = request.get_json()
-        ip = data.get('ip')
-        if not ip:
-            return jsonify({ 'success': False, 'message': 'No IP provided' }), 400
-        
-        success, message = block_ip(ip)
-        return jsonify({ 'success': success, 'message': message })
-    except Exception as e:
-        return jsonify({ 'success': False, 'message': str(e) }), 500
-
-@app.route('/api/logs/gemini')
-def api_logs_gemini():
-    """Return the last N lines of the Gemini log as JSON."""
-    try:
-        n = request.args.get('n', default=200, type=int)
-        log_path = os.path.join(os.path.dirname(__file__), 'logs', 'gemini.log')
-        if not os.path.exists(log_path):
-            return jsonify({ 'lines': [], 'message': 'No log file yet' })
-        # Read last N lines efficiently
-        lines = []
-        with open(log_path, 'rb') as f:
-            f.seek(0, os.SEEK_END)
-            size = f.tell()
-            block = -1024
-            data = b''
-            while len(lines) <= n and -block < size:
-                f.seek(block, os.SEEK_END)
-                data = f.read(-block) + data
-                lines = data.splitlines()
-                block *= 2
-        tail = [l.decode('utf-8', errors='replace') for l in lines[-n:]]
-        return jsonify({ 'lines': tail })
-    except Exception as e:
-        return jsonify({ 'error': str(e) }), 500
-
-@app.route('/api/security/ai-analysis')
-def api_security_ai():
-    """Run AI Security Analysis over a compact snapshot; returns structured JSON.
-    Non-intrusive, additive endpoint.
-    """
-    try:
-        from security_analysis import build_security_snapshot, detect_suspects
-        from llm_wrapper import get_llm_security_analysis
-        window = int(request.args.get('window', 900))
-        snapshot = build_security_snapshot(window_seconds=window)
-        # Try AI; it will fallback to detect_suspects if LLM not available
-        result = get_llm_security_analysis(snapshot)
-        return jsonify({
-            'status': 'ok',
-            'window_seconds': snapshot.get('window_seconds'),
-            'generated_at': snapshot.get('generated_at'),
-            'result': result
-        })
-    except Exception as e:
-        # Fallback to heuristics only
-        try:
-            from security_analysis import build_security_snapshot, detect_suspects
-            snapshot = build_security_snapshot()
-            result = detect_suspects(snapshot)
-            return jsonify({ 'status': 'ok', 'result': result, 'fallback': True })
-        except Exception as ie:
-            return jsonify({ 'status': 'error', 'error': str(e), 'fallback_error': str(ie) }), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
