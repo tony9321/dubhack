@@ -216,7 +216,7 @@
                     </tr>
                 </thead>
                 <tbody id="devices-body">
-                    <tr><td colspan="5" style="padding:12px;color:#666">Loading devices...</td></tr>
+                    <tr><td colspan="6" style="padding:12px;color:#666">Loading devices...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -303,7 +303,7 @@
             const tbody = document.getElementById('devices-body');
             const lastUpdate = document.getElementById('devices-last-update');
             if(!devResp || !devResp.devices){
-                tbody.innerHTML = '<tr><td colspan="5" style="padding:12px;color:#900">Failed to load devices</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" style="padding:12px;color:#900">Failed to load devices</td></tr>';
                 lastUpdate.textContent = 'Failed to load devices';
                 return;
             }
@@ -311,7 +311,7 @@
             lastUpdate.textContent = 'Last update: ' + new Date().toLocaleTimeString();
             const devices = devResp.devices;
             if(devices.length === 0){
-                tbody.innerHTML = '<tr><td colspan="5" style="padding:12px;color:#666">No devices discovered</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" style="padding:12px;color:#666">No devices discovered</td></tr>';
                 return;
             }
 
@@ -323,7 +323,8 @@
                     const ip = d.ip;
                     const hostname = d.hostname || '';
                     const mac = d.mac || '';
-                    const type = d.type || 'Unknown';
+                    // Always use backend type, fallback to 'Unknown' if missing
+                    const type = (typeof d.type === 'string' && d.type.length > 0) ? d.type : 'Unknown';
                     const m = await fetchJSON(`/api/device/${ip}/metrics`);
                     let latency = null, up = null, ts = null;
                     if(m && m.metrics && m.metrics.length>0){
@@ -341,10 +342,10 @@
             tbody.innerHTML = '';
             for(const r of rows){
                 const statusColor = r.up ? '#0a0' : '#c00';
-                const latencyText = (r.latency === null) ? '' : (Math.round(r.latency*100)/100) + ' ms';
-                const lastSeen = r.ts ? r.ts : '';
+                const latencyText = (r.latency === null) ? '—' : (Math.round(r.latency*100)/100) + ' ms';
+                const lastSeen = r.ts ? r.ts : '—';
                 const hostname = r.hostname || r.mac || '';
-                const type = r.type || '';
+                const type = (typeof r.type === 'string' && r.type.length > 0) ? r.type : 'Unknown';
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td style="padding:8px;border-bottom:1px solid #f0f0f0">${r.ip}</td>
